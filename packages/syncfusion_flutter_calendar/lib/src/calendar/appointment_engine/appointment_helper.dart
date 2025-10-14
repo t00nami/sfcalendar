@@ -837,55 +837,36 @@ class AppointmentHelper {
   /// Update the appointment view collection position and its max position
   /// details.
   static void setAppointmentPositionAndMaxPosition(
-    List<AppointmentView> appointmentCollection,
-    SfCalendar calendar,
-    CalendarView view,
-    List<CalendarAppointment> visibleAppointments,
-    bool isAllDay, [
-    int? resourceIndex,
-  ]) {
+      List<AppointmentView> appointmentCollection,
+      SfCalendar calendar,
+      CalendarView view,
+      List<CalendarAppointment> visibleAppointments,
+      bool isAllDay, [
+        int? resourceIndex,
+      ]) {
     final bool isTimeline = CalendarViewHelper.isTimelineView(view);
+
     final List<CalendarAppointment> normalAppointments = visibleAppointments
         .where(
           (CalendarAppointment app) =>
-              _iterateAppointment(app, isTimeline, isAllDay),
-        )
+          _iterateAppointment(app, isTimeline, isAllDay),
+    )
         .toList();
+
+    // Ordenar citas por fecha de inicio
     normalAppointments.sort(
-      (CalendarAppointment app1, CalendarAppointment app2) =>
+          (CalendarAppointment app1, CalendarAppointment app2) =>
           app1.actualStartTime.compareTo(app2.actualStartTime),
     );
-    if (!isTimeline) {
-      normalAppointments.sort(
-        (CalendarAppointment app1, CalendarAppointment app2) =>
-            _orderAppointmentsDescending(app1.isSpanned, app2.isSpanned),
-      );
-      normalAppointments.sort(
-        (CalendarAppointment app1, CalendarAppointment app2) =>
-            _orderAppointmentsDescending(app1.isAllDay, app2.isAllDay),
-      );
-    } else {
-      normalAppointments.sort(
-        (CalendarAppointment app1, CalendarAppointment app2) =>
-            orderAppointmentsAscending(app1.isAllDay, app2.isAllDay),
-      );
-      normalAppointments.sort(
-        (CalendarAppointment app1, CalendarAppointment app2) =>
-            orderAppointmentsAscending(app1.isSpanned, app2.isSpanned),
-      );
-    }
 
-    final Map<int, List<AppointmentView>> dict = <int, List<AppointmentView>>{};
     final List<AppointmentView> processedViews = <AppointmentView>[];
-    int maxColsCount = 1;
 
-    final int timeIntervalMinutes = CalendarViewHelper.getTimeInterval(
-      calendar.timeSlotViewSettings,
-    );
-    for (int count = 0; count < normalAppointments.length; count++) {
-      final CalendarAppointment currentAppointment = normalAppointments[count];
+    // Map para agrupar citas que se superponen
+    final List<List<AppointmentView>> overlappingGroups = [];
+
+    for (final CalendarAppointment currentAppointment in normalAppointments) {
       if ((view == CalendarView.workWeek ||
-              view == CalendarView.timelineWorkWeek) &&
+          view == CalendarView.timelineWorkWeek) &&
           calendar.timeSlotViewSettings.nonWorkingDays.contains(
             currentAppointment.actualStartTime.weekday,
           ) &&
@@ -895,117 +876,56 @@ class AppointmentHelper {
         continue;
       }
 
-      List<AppointmentView>? intersectingApps;
       final AppointmentView currentAppView = _getAppointmentView(
         currentAppointment,
         appointmentCollection,
         resourceIndex,
       );
 
-      for (int position = 0; position < maxColsCount; position++) {
-        bool isIntersecting = false;
-        for (int j = 0; j < processedViews.length; j++) {
-          final AppointmentView previousApp = processedViews[j];
-          if (previousApp.position != position) {
-            continue;
-          }
+      bool added = false;
 
+      // Buscar grupo donde la cita se superponga
+      for (final group in overlappingGroups) {
+        bool intersects = false;
+        for (final existing in group) {
           if (_isIntersectingAppointmentInDayView(
             calendar,
             view,
             currentAppointment,
-            previousApp,
-            previousApp.appointment!,
-            timeIntervalMinutes,
+            existing,
+            existing.appointment!,
+            CalendarViewHelper.getTimeInterval(calendar.timeSlotViewSettings),
           )) {
-            isIntersecting = true;
-
-            if (intersectingApps == null) {
-              final List<int> keyList = dict.keys.toList();
-              for (int keyCount = 0; keyCount < keyList.length; keyCount++) {
-                final int key = keyList[keyCount];
-                if (dict[key]!.contains(previousApp)) {
-                  intersectingApps = dict[key];
-                  break;
-                }
-              }
-
-              if (intersectingApps == null) {
-                intersectingApps = <AppointmentView>[];
-                dict[dict.keys.length] = intersectingApps;
-              }
-
-              break;
-            }
+            intersects = true;
+            break;
           }
         }
-
-        if (!isIntersecting && currentAppView.position == -1) {
-          currentAppView.position = position;
+        if (intersects) {
+          group.add(currentAppView);
+          added = true;
+          break;
         }
+      }
+
+      // Si no intersecta con ningún grupo, crear uno nuevo
+      if (!added) {
+        overlappingGroups.add([currentAppView]);
       }
 
       processedViews.add(currentAppView);
-      if (currentAppView.position == -1) {
-        int position = 0;
-        if (intersectingApps == null) {
-          intersectingApps = <AppointmentView>[];
-          dict[dict.keys.length] = intersectingApps;
-        } else if (intersectingApps.isNotEmpty) {
-          position = intersectingApps
-              .reduce(
-                (AppointmentView currentAppview, AppointmentView nextAppview) =>
-                    currentAppview.maxPositions > nextAppview.maxPositions
-                    ? currentAppview
-                    : nextAppview,
-              )
-              .maxPositions;
-        }
-
-        intersectingApps.add(currentAppView);
-        for (int i = 0; i < intersectingApps.length; i++) {
-          intersectingApps[i].maxPositions = position + 1;
-        }
-
-        currentAppView.position = position;
-        if (maxColsCount <= position) {
-          maxColsCount = position + 1;
-        }
-      } else {
-        int maxPosition = 1;
-        if (intersectingApps == null) {
-          intersectingApps = <AppointmentView>[];
-          dict[dict.keys.length] = intersectingApps;
-        } else if (intersectingApps.isNotEmpty) {
-          maxPosition = intersectingApps
-              .reduce(
-                (AppointmentView currentAppview, AppointmentView nextAppview) =>
-                    currentAppview.maxPositions > nextAppview.maxPositions
-                    ? currentAppview
-                    : nextAppview,
-              )
-              .maxPositions;
-
-          if (currentAppView.position == maxPosition) {
-            maxPosition++;
-          }
-        }
-
-        intersectingApps.add(currentAppView);
-        for (int i = 0; i < intersectingApps.length; i++) {
-          intersectingApps[i].maxPositions = maxPosition;
-        }
-
-        if (maxColsCount <= maxPosition) {
-          maxColsCount = maxPosition + 1;
-        }
-      }
-
-      intersectingApps = null;
     }
 
-    dict.clear();
+    // Asignar posición y maxPositions según cada grupo
+    for (final group in overlappingGroups) {
+      final int count = group.length;
+      for (int i = 0; i < count; i++) {
+        group[i].position = i;
+        group[i].maxPositions = count;
+      }
+    }
   }
+
+
 
   /// Convert the date time from appointment timezone value to calender timezone
   /// value. If calendar timezone value as null or empty then it convert

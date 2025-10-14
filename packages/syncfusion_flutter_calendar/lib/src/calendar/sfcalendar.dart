@@ -190,6 +190,7 @@ class SfCalendar extends StatefulWidget {
     this.timeSlotViewSettings = const TimeSlotViewSettings(),
     this.resourceViewSettings = const ResourceViewSettings(),
     this.monthViewSettings = const MonthViewSettings(),
+    this.allowAppointmentOverlap,
     DateTime? initialDisplayDate,
     this.initialSelectedDate,
     this.scheduleViewSettings = const ScheduleViewSettings(),
@@ -632,6 +633,7 @@ class SfCalendar extends StatefulWidget {
   ///    );
   ///  }
   ///  ```
+  final bool? allowAppointmentOverlap;
   final CalendarAppointmentBuilder? appointmentBuilder;
 
   /// A builder that builds a widget that replaces the time region view in day,
