@@ -5221,53 +5221,22 @@ class _SfCalendarState extends State<SfCalendar>
   }
 
   void _updateAppointmentPositionAndMaxPosition(
-    List<List<AppointmentView>> allDayAppointmentView,
-  ) {
+      List<List<AppointmentView>> allDayAppointmentView,
+      ) {
     for (int i = 0; i < allDayAppointmentView.length; i++) {
       final List<AppointmentView> intersectingAppointments =
-          allDayAppointmentView[i];
+      allDayAppointmentView[i];
+
       for (int j = 0; j < intersectingAppointments.length; j++) {
-        final AppointmentView currentView = intersectingAppointments[j];
-        if (currentView.position == -1) {
-          currentView.position = 0;
-          for (int k = 0; k < j; k++) {
-            final AppointmentView? intersectView = _getAppointmentOnPosition(
-              currentView,
-              intersectingAppointments,
-            );
-            if (intersectView != null) {
-              currentView.position++;
-            } else {
-              break;
-            }
-          }
-        }
-      }
+        final AppointmentView appointmentView = intersectingAppointments[j];
 
-      if (intersectingAppointments.isNotEmpty) {
-        final int maxPosition =
-            intersectingAppointments
-                .reduce(
-                  (
-                    AppointmentView currentAppView,
-                    AppointmentView nextAppView,
-                  ) => currentAppView.position > nextAppView.position
-                      ? currentAppView
-                      : nextAppView,
-                )
-                .position +
-            1;
-
-        for (int j = 0; j < intersectingAppointments.length; j++) {
-          final AppointmentView appointmentView = intersectingAppointments[j];
-          if (appointmentView.maxPositions != -1) {
-            continue;
-          }
-          appointmentView.maxPositions = maxPosition;
-        }
+        // 🔧 Fuerza todas las citas a ocupar la misma posición
+        appointmentView.position = 0;
+        appointmentView.maxPositions = 1;
       }
     }
   }
+
 
   AppointmentView? _getAppointmentOnPosition(
     AppointmentView? currentView,
