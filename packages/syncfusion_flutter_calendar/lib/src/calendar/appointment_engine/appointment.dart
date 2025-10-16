@@ -84,6 +84,7 @@ class Appointment with Diagnosticable {
     required this.endTime,
     this.subject = '',
     this.isIncomplete,
+    this.isMarcaje,
     this.color = Colors.lightBlue,
     this.recurrenceExceptionDates,
   }) : notes = notes != null && notes.contains('isOccurrenceAppointment')
@@ -265,6 +266,7 @@ class Appointment with Diagnosticable {
   /// }
   ///  ```
   bool? isIncomplete;
+  bool? isMarcaje;
   bool isAllDay;
 
   /// The subject for the [Appointment] in [SfCalendar].
