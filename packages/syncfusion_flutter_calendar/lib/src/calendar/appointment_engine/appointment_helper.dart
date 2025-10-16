@@ -917,12 +917,23 @@ class AppointmentHelper {
 
     // Asignar posición y maxPositions según cada grupo
     for (final group in overlappingGroups) {
-      for (final appView in group) {
-        // Fuerza a que todas las citas se dibujen en la misma columna
-        appView.position = 0;
-        appView.maxPositions = 1;
+      final int count = group.length;
+
+      for (int i = 0; i < count; i++) {
+        final appView = group[i];
+
+        if (isAllDay) {
+          // 🔹 Para citas de día completo: se apilan en vertical (una debajo de otra)
+          appView.position = i;
+          appView.maxPositions = count;
+        } else {
+          // 🔹 Para citas normales: todas se solapan
+          appView.position = 0;
+          appView.maxPositions = 1;
+        }
       }
     }
+
 
   }
 
