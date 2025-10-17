@@ -853,18 +853,40 @@ class AppointmentHelper {
     )
         .toList();
 
-    // Ordenar citas por fecha de inicio
+
     normalAppointments.sort(
           (CalendarAppointment app1, CalendarAppointment app2) =>
           app1.actualStartTime.compareTo(app2.actualStartTime),
     );
+    if (!isTimeline) {
+      normalAppointments.sort(
+            (CalendarAppointment app1, CalendarAppointment app2) =>
+            _orderAppointmentsDescending(app1.isSpanned, app2.isSpanned),
+      );
+      normalAppointments.sort(
+            (CalendarAppointment app1, CalendarAppointment app2) =>
+            _orderAppointmentsDescending(app1.isAllDay, app2.isAllDay),
+      );
+    } else {
+      normalAppointments.sort(
+            (CalendarAppointment app1, CalendarAppointment app2) =>
+            orderAppointmentsAscending(app1.isAllDay, app2.isAllDay),
+      );
+      normalAppointments.sort(
+            (CalendarAppointment app1, CalendarAppointment app2) =>
+            orderAppointmentsAscending(app1.isSpanned, app2.isSpanned),
+      );
+    }
 
+    final Map<int, List<AppointmentView>> dict = <int, List<AppointmentView>>{};
     final List<AppointmentView> processedViews = <AppointmentView>[];
+    int maxColsCount = 1;
 
-    // Map para agrupar citas que se superponen
-    final List<List<AppointmentView>> overlappingGroups = [];
-
-    for (final CalendarAppointment currentAppointment in normalAppointments) {
+    final int timeIntervalMinutes = CalendarViewHelper.getTimeInterval(
+      calendar.timeSlotViewSettings,
+    );
+    for (int count = 0; count < normalAppointments.length; count++) {
+      final CalendarAppointment currentAppointment = normalAppointments[count];
       if ((view == CalendarView.workWeek ||
           view == CalendarView.timelineWorkWeek) &&
           calendar.timeSlotViewSettings.nonWorkingDays.contains(
@@ -876,63 +898,128 @@ class AppointmentHelper {
         continue;
       }
 
+      List<AppointmentView>? intersectingApps;
       final AppointmentView currentAppView = _getAppointmentView(
         currentAppointment,
         appointmentCollection,
         resourceIndex,
       );
 
-      bool added = false;
+      for (int position = 0; position < maxColsCount; position++) {
+        bool isIntersecting = false;
+        for (int j = 0; j < processedViews.length; j++) {
+          final AppointmentView previousApp = processedViews[j];
+          if (previousApp.position != position) {
+            continue;
+          }
 
-      // Buscar grupo donde la cita se superponga
-      for (final group in overlappingGroups) {
-        bool intersects = false;
-        for (final existing in group) {
+
+
+
+
           if (_isIntersectingAppointmentInDayView(
             calendar,
             view,
             currentAppointment,
-            existing,
-            existing.appointment!,
-            CalendarViewHelper.getTimeInterval(calendar.timeSlotViewSettings),
+            previousApp,
+            previousApp.appointment!,
+            timeIntervalMinutes,
           )) {
-            intersects = true;
-            break;
+            isIntersecting = true;
+
+            if (intersectingApps == null) {
+              final List<int> keyList = dict.keys.toList();
+              for (int keyCount = 0; keyCount < keyList.length; keyCount++) {
+                final int key = keyList[keyCount];
+                if (dict[key]!.contains(previousApp)) {
+                  intersectingApps = dict[key];
+                  break;
+                }
+              }
+
+              if (intersectingApps == null) {
+                intersectingApps = <AppointmentView>[];
+                dict[dict.keys.length] = intersectingApps;
+              }
+
+              break;
+            }
           }
         }
-        if (intersects) {
-          group.add(currentAppView);
-          added = true;
-          break;
-        }
-      }
 
-      // Si no intersecta con ningún grupo, crear uno nuevo
-      if (!added) {
-        overlappingGroups.add([currentAppView]);
+        if (!isIntersecting && currentAppView.position == -1) {
+          currentAppView.position = position;
+
+        }
       }
 
       processedViews.add(currentAppView);
-    }
+      if (currentAppView.position == -1) {
+        int position = 0;
+        if (intersectingApps == null) {
+          intersectingApps = <AppointmentView>[];
+          dict[dict.keys.length] = intersectingApps;
+        } else if (intersectingApps.isNotEmpty) {
+          position = intersectingApps
+              .reduce(
+                (AppointmentView currentAppview, AppointmentView nextAppview) =>
+            currentAppview.maxPositions > nextAppview.maxPositions
+                ? currentAppview
+                : nextAppview,
+          )
+              .maxPositions;
+        }
 
-    // Asignar posición y maxPositions según cada grupo
-    for (final group in overlappingGroups) {
-      final int count = group.length;
+        intersectingApps.add(currentAppView);
+        for (int i = 0; i < intersectingApps.length; i++) {
+          intersectingApps[i].maxPositions = position + 1;
+        }
 
-      for (int i = 0; i < count; i++) {
-        final appView = group[i];
+        currentAppView.position = position;
+        if (maxColsCount <= position) {
+          maxColsCount = position + 1;
+        }
+      } else {
+        int maxPosition = 1;
+        if (intersectingApps == null) {
+          intersectingApps = <AppointmentView>[];
+          dict[dict.keys.length] = intersectingApps;
+        } else if (intersectingApps.isNotEmpty) {
+          maxPosition = intersectingApps
+              .reduce(
+                (AppointmentView currentAppview, AppointmentView nextAppview) =>
+            currentAppview.maxPositions > nextAppview.maxPositions
+                ? currentAppview
+                : nextAppview,
+          )
+              .maxPositions;
 
-        if (isAllDay) {
-          // 🔹 Para citas de día completo: se apilan en vertical (una debajo de otra)
-          appView.position = i;
-          appView.maxPositions = count;
-        } else {
-          // 🔹 Para citas normales: todas se solapan
-          appView.position = 0;
-          appView.maxPositions = 1;
+          if (currentAppView.position == maxPosition) {
+            maxPosition++;
+          }
+        }
+
+        intersectingApps.add(currentAppView);
+        for (int i = 0; i < intersectingApps.length; i++) {
+          intersectingApps[i].maxPositions = maxPosition;
+        }
+
+        if (maxColsCount <= maxPosition) {
+          maxColsCount = maxPosition + 1;
         }
       }
+
+      intersectingApps = null;
     }
+
+    dict.clear();
+
+
+
+
+
+
+
 
 
   }
